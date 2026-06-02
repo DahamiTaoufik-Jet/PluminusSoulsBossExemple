@@ -28,12 +28,14 @@ namespace Soulsboss.Combat
         public float dodgeDuration = 0.35f;
         public float dodgeSpeed = 10f;
         public float iframeDuration = 0.25f;
+        public float dodgeCooldown = 1f;
 
         public UnityEvent OnAttackStarted;
         public UnityEvent OnDodged;
 
         CharacterController cc;
         float nextAttackTime;
+        float nextDodgeTime;
         bool dodging;
         bool attacking;
         Vector3 originalSwordRotation;
@@ -60,6 +62,8 @@ namespace Soulsboss.Combat
         {
             if (dodging || attacking) return;
             if (direction == 0) return;
+            if (Time.time < nextDodgeTime) return;
+            nextDodgeTime = Time.time + dodgeCooldown;
             StartCoroutine(DodgeRoutine(direction > 0 ? 1 : -1));
         }
 

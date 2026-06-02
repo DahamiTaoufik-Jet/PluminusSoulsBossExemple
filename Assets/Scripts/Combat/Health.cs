@@ -43,7 +43,7 @@ namespace Soulsboss.Combat
             {
                 current = 0f;
                 OnDeath?.Invoke();
-                StartCoroutine(DisableAfterDelay());
+                if (!IsAlive) StartCoroutine(DisableAfterDelay());
             }
             else
             {
@@ -59,7 +59,7 @@ namespace Soulsboss.Combat
             {
                 current = 0f;
                 OnDeath?.Invoke();
-                StartCoroutine(DisableAfterDelay());
+                if (!IsAlive) StartCoroutine(DisableAfterDelay());
             }
             else
             {
@@ -76,6 +76,7 @@ namespace Soulsboss.Combat
 
         public void ResetHealth()
         {
+            StopAllCoroutines();
             current = maxHp;
             invincible = false;
             guarding = false;
