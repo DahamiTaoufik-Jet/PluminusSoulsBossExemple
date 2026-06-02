@@ -18,9 +18,14 @@ namespace Soulsboss.Combat
         public UnityEvent OnDamaged;
         public UnityEvent OnBlocked;
         public UnityEvent OnDeath;
+        [Tooltip("Fired after death when the entity is fully disabled.")]
+        public UnityEvent OnDisabled;
 
         public Team Team => team;
         public bool IsAlive => current > 0f;
+
+        [Tooltip("Delay before disabling the GameObject after death.")]
+        public float disableDelay = 1.5f;
 
         void Awake()
         {
@@ -38,6 +43,7 @@ namespace Soulsboss.Combat
             {
                 current = 0f;
                 OnDeath?.Invoke();
+                StartCoroutine(DisableAfterDelay());
             }
             else
             {
@@ -53,11 +59,19 @@ namespace Soulsboss.Combat
             {
                 current = 0f;
                 OnDeath?.Invoke();
+                StartCoroutine(DisableAfterDelay());
             }
             else
             {
                 OnDamaged?.Invoke();
             }
+        }
+
+        System.Collections.IEnumerator DisableAfterDelay()
+        {
+            yield return new WaitForSeconds(disableDelay);
+            OnDisabled?.Invoke();
+            gameObject.SetActive(false);
         }
 
         public void ResetHealth()

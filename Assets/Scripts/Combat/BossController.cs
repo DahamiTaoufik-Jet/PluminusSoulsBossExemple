@@ -23,6 +23,14 @@ namespace Soulsboss.Combat
         public float guardJitter = 0.5f;
         public float turnSpeed = 720f;
 
+        [Header("Movement")]
+        [Tooltip("Move speed toward the player.")]
+        public float moveSpeed = 3f;
+        [Tooltip("Distance at which the boss stops approaching.")]
+        public float preferredDistance = 2.5f;
+        [Tooltip("Boss won't move if already within this range.")]
+        public float stopDistance = 2f;
+
         public UnityEvent OnAttackBegan;
         public UnityEvent OnAttackEnded;
 
@@ -32,11 +40,13 @@ namespace Soulsboss.Combat
         public BossAttack CurrentAttack { get; private set; }
 
         Coroutine loop;
+        CharacterController cc;
 
         void Start()
         {
             if (health == null) health = GetComponent<Health>();
             if (shield == null) shield = GetComponentInChildren<BossShield>();
+            cc = GetComponent<CharacterController>();
             ResolveTarget();
             loop = StartCoroutine(Loop());
         }
@@ -46,6 +56,7 @@ namespace Soulsboss.Combat
         void Update()
         {
             if (canRotate && Current != State.Attacking) FaceTarget();
+            if (Current == State.Guarding || Current == State.Idle) MoveTowardTarget();
             if (Current != State.Dead && health != null && !health.IsAlive)
             {
                 Current = State.Dead;
@@ -53,6 +64,23 @@ namespace Soulsboss.Combat
                 if (loop != null) StopCoroutine(loop);
                 StopAllCoroutines();
             }
+        }
+
+        void MoveTowardTarget()
+        {
+            if (target == null) return;
+            Vector3 diff = target.position - transform.position;
+            diff.y = 0f;
+            float dist = diff.magnitude;
+            if (dist <= stopDistance) return;
+
+            Vector3 dir = diff / dist;
+            Vector3 move = dir * moveSpeed * Time.deltaTime;
+
+            if (cc != null)
+                cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
+            else
+                transform.position += move;
         }
 
         void ResolveTarget()

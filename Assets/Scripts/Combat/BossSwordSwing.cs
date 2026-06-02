@@ -13,67 +13,63 @@ namespace Soulsboss.Combat
         public float swingDuration = 0.2f;
         public float endingLag = 1.1f;
 
-        [Header("Swing arc (local euler angles)")]
-        [Tooltip("Sword raised position before swing.")]
+        [Header("Raised pose (windup)")]
+        public Vector3 raisedPosition = new Vector3(0f, 1f, 0f);
         public Vector3 raisedRotation = new Vector3(0f, 0f, 90f);
-        [Tooltip("Sword rest / end position after swing.")]
-        public Vector3 restRotation = new Vector3(0f, 0f, -45f);
 
+        [Header("Strike pose (end of swing)")]
+        public Vector3 strikePosition = new Vector3(0f, 0f, 0.5f);
+        public Vector3 strikeRotation = new Vector3(0f, 0f, -45f);
+
+        Vector3 originalPosition;
         Vector3 originalRotation;
-
-        void Awake()
-        {
-            if (swordPivot != null) originalRotation = swordPivot.localEulerAngles;
-        }
 
         public override IEnumerator Execute(BossController boss)
         {
-            if (swordPivot != null) originalRotation = swordPivot.localEulerAngles;
-
-            // Telegraph: raise sword above head
             if (swordPivot != null)
             {
-                yield return RotateTo(raisedRotation, telegraph);
+                originalPosition = swordPivot.localPosition;
+                originalRotation = swordPivot.localEulerAngles;
             }
+
+            // Telegraph: raise sword
+            if (swordPivot != null)
+                yield return MoveTo(raisedPosition, raisedRotation, telegraph);
             else
-            {
                 yield return new WaitForSeconds(telegraph);
-            }
 
             // Active window: swing down
             if (hitbox != null) hitbox.Begin();
             if (swordPivot != null)
-            {
-                yield return RotateTo(restRotation, swingDuration);
-            }
+                yield return MoveTo(strikePosition, strikeRotation, swingDuration);
             else
-            {
                 yield return new WaitForSeconds(swingDuration);
-            }
             if (hitbox != null) hitbox.End();
 
-            // Ending lag: sword stays down, shield stays down = punish window
+            // Ending lag
             yield return new WaitForSeconds(endingLag);
 
             // Return to original pose
             if (swordPivot != null)
-            {
-                yield return RotateTo(originalRotation, 0.3f);
-            }
+                yield return MoveTo(originalPosition, originalRotation, 0.3f);
         }
 
-        IEnumerator RotateTo(Vector3 targetEuler, float duration)
+        IEnumerator MoveTo(Vector3 targetPos, Vector3 targetEuler, float duration)
         {
-            Quaternion from = swordPivot.localRotation;
-            Quaternion to = Quaternion.Euler(targetEuler);
+            Vector3 fromPos = swordPivot.localPosition;
+            Quaternion fromRot = swordPivot.localRotation;
+            Quaternion toRot = Quaternion.Euler(targetEuler);
             float t = 0f;
             while (t < duration)
             {
                 t += Time.deltaTime;
-                swordPivot.localRotation = Quaternion.Slerp(from, to, t / duration);
+                float ratio = t / duration;
+                swordPivot.localPosition = Vector3.Lerp(fromPos, targetPos, ratio);
+                swordPivot.localRotation = Quaternion.Slerp(fromRot, toRot, ratio);
                 yield return null;
             }
-            swordPivot.localRotation = to;
+            swordPivot.localPosition = targetPos;
+            swordPivot.localRotation = toRot;
         }
     }
 }

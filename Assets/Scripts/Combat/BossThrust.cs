@@ -10,13 +10,13 @@ namespace Soulsboss.Combat
 
         [Header("Timing")]
         public float telegraph = 0.5f;
-        public float thrustDuration = 0.12f;
+        public float thrustDuration = 0.25f;
         public float endingLag = 0.9f;
 
         [Header("Positions (local)")]
-        public Vector3 windupPosition = new Vector3(0f, 0.5f, -0.8f);
+        public Vector3 windupPosition = new Vector3(-0.8f, 0.5f, 0f);
         public Vector3 windupRotation = Vector3.zero;
-        public Vector3 thrustPosition = new Vector3(0f, 0.5f, 1.2f);
+        public Vector3 thrustPosition = new Vector3(1.2f, 0.5f, 0f);
         public Vector3 thrustRotation = Vector3.zero;
 
         Vector3 originalPos;
