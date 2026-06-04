@@ -6,6 +6,12 @@ namespace Soulsboss.Combat
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
     {
+        public enum ControlMode { Manual, AI }
+
+        [Header("Control")]
+        [Tooltip("Manual = input clavier/manette. AI = pilote par Pluminus ActionRouter.")]
+        public ControlMode controlMode = ControlMode.Manual;
+
         [Header("References")]
         [Tooltip("Laisse vide = auto-find par tag 'Boss'.")]
         public Transform boss;
@@ -15,6 +21,14 @@ namespace Soulsboss.Combat
         public float rotationSpeed = 1440f;
         public float gravity = -20f;
 
+        [Header("Dash")]
+        [Tooltip("Distance parcourue par le dash.")]
+        public float dashDistance = 3f;
+        [Tooltip("Duree du dash en secondes.")]
+        public float dashDuration = 0.25f;
+        [Tooltip("Cooldown entre deux dashs.")]
+        public float dashCooldown = 0.5f;
+
         [Header("Ground check")]
         public float groundCheckRadius = 0.3f;
         public float groundCheckOffset = 0.1f;
@@ -22,15 +36,18 @@ namespace Soulsboss.Combat
 
         CharacterController cc;
         Vector2 moveInput;
+        Vector2 aiMoveInput;
         float fallSpeed;
         bool inputLocked;
         bool grounded;
+        bool isDashing;
+        float nextDashTime;
 
         // Directions calculees chaque frame (joueur -> boss)
         Vector3 toBossDir;
         Vector3 strafeDir;
 
-        public Vector2 MoveInput => moveInput;
+        public Vector2 MoveInput => controlMode == ControlMode.AI ? aiMoveInput : moveInput;
         public bool IsInputLocked => inputLocked;
         public bool IsGrounded => grounded;
         // Expose pour le dodge dans PlayerCombat
@@ -88,7 +105,8 @@ namespace Soulsboss.Combat
 
         void ApplyMovement()
         {
-            Vector3 wish = inputLocked ? Vector3.zero : (toBossDir * moveInput.y + strafeDir * moveInput.x);
+            Vector2 currentInput = (controlMode == ControlMode.AI) ? aiMoveInput : moveInput;
+            Vector3 wish = inputLocked ? Vector3.zero : (toBossDir * currentInput.y + strafeDir * currentInput.x);
             if (wish.sqrMagnitude > 1f) wish.Normalize();
 
             Vector3 move = wish * moveSpeed;
@@ -114,7 +132,88 @@ namespace Soulsboss.Combat
 
         public void SetInputLocked(bool locked) => inputLocked = locked;
 
-        void OnMove(InputValue v) => moveInput = v.Get<Vector2>();
+        // ──────────────────────────────────────
+        //  Actions publiques pour ActionRouter
+        // ──────────────────────────────────────
+
+        /// <summary>Action 0 : Ne rien faire (Idle).</summary>
+        public void DoIdle() { }
+
+        /// <summary>Action 1 : Dash vers le boss.</summary>
+        public void DoDashForward() { TryDash(toBossDir); }
+
+        /// <summary>Action 2 : Dash en arriere du boss.</summary>
+        public void DoDashBackward() { TryDash(-toBossDir); }
+
+        /// <summary>Action 3 : Dash strafe gauche.</summary>
+        public void DoDashLeft() { TryDash(-strafeDir); }
+
+        /// <summary>Action 4 : Dash strafe droite.</summary>
+        public void DoDashRight() { TryDash(strafeDir); }
+
+        /// <summary>Action 5 : Attaquer. Delegue a PlayerCombat.</summary>
+        public void DoAttack()
+        {
+            PlayerCombat combat = GetComponent<PlayerCombat>();
+            if (combat != null) combat.RequestAttack();
+        }
+
+        /// <summary>Action 6 : Esquiver a gauche.</summary>
+        public void DoDodgeLeft()
+        {
+            PlayerCombat combat = GetComponent<PlayerCombat>();
+            if (combat != null) combat.RequestDodge(1);
+        }
+
+        /// <summary>Action 7 : Esquiver a droite.</summary>
+        public void DoDodgeRight()
+        {
+            PlayerCombat combat = GetComponent<PlayerCombat>();
+            if (combat != null) combat.RequestDodge(-1);
+        }
+
+        // ──────────────────────────────────────
+        //  Dash
+        // ──────────────────────────────────────
+
+        private void TryDash(Vector3 direction)
+        {
+            if (isDashing || inputLocked) return;
+            if (Time.time < nextDashTime) return;
+            if (direction.sqrMagnitude < 0.001f) return;
+            StartCoroutine(DashRoutine(direction.normalized));
+        }
+
+        System.Collections.IEnumerator DashRoutine(Vector3 dir)
+        {
+            isDashing = true;
+            inputLocked = true;
+            nextDashTime = Time.time + dashCooldown;
+
+            float speed = dashDistance / dashDuration;
+            float t = 0f;
+
+            while (t < dashDuration)
+            {
+                Vector3 move = dir * speed * Time.deltaTime;
+                move.y = fallSpeed * Time.deltaTime;
+                cc.Move(move);
+                t += Time.deltaTime;
+                yield return null;
+            }
+
+            isDashing = false;
+            inputLocked = false;
+        }
+
+        // ──────────────────────────────────────
+        //  Input manuel (inchange)
+        // ──────────────────────────────────────
+
+        void OnMove(InputValue v)
+        {
+            if (controlMode == ControlMode.Manual) moveInput = v.Get<Vector2>();
+        }
 
 #if UNITY_EDITOR
         void OnDrawGizmosSelected()

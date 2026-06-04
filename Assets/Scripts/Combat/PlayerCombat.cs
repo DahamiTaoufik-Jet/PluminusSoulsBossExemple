@@ -39,6 +39,7 @@ namespace Soulsboss.Combat
         bool dodging;
         bool attacking;
         Vector3 originalSwordRotation;
+        ParticleSystem dodgeParticles;
 
         public bool CanAttack => Time.time >= nextAttackTime && !dodging && !attacking;
         public bool IsDodging => dodging;
@@ -49,6 +50,7 @@ namespace Soulsboss.Combat
             cc = GetComponent<CharacterController>();
             if (controller == null) controller = GetComponent<PlayerController>();
             if (health == null) health = GetComponent<Health>();
+            BuildDodgeParticles();
         }
 
         public void RequestAttack()
@@ -118,6 +120,7 @@ namespace Soulsboss.Combat
             OnDodged?.Invoke();
             controller.SetInputLocked(true);
             if (health != null) health.invincible = true;
+            if (dodgeParticles != null) dodgeParticles.Play();
 
             Transform boss = controller.boss;
             float iframeEnd = Time.time + iframeDuration;
@@ -171,6 +174,41 @@ namespace Soulsboss.Combat
             if (health != null) health.invincible = false;
             controller.SetInputLocked(false);
             dodging = false;
+        }
+
+        void BuildDodgeParticles()
+        {
+            var go = new GameObject("Dodge_VFX");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = Vector3.zero;
+            dodgeParticles = go.AddComponent<ParticleSystem>();
+            dodgeParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            var main = dodgeParticles.main;
+            main.duration = 0.2f;
+            main.loop = false;
+            main.startLifetime = 0.4f;
+            main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 5f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.3f);
+            main.startColor = new Color(0.6f, 0.85f, 1f, 0.8f);
+            main.maxParticles = 30;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+            var emission = dodgeParticles.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 20) });
+
+            var shape = dodgeParticles.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 0.5f;
+
+            var sol = dodgeParticles.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0f));
+
+            var renderer = dodgeParticles.GetComponent<ParticleSystemRenderer>();
+            renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+            renderer.material.color = new Color(0.6f, 0.85f, 1f, 0.8f);
         }
 
         void OnAttack(InputValue v) { if (v.isPressed) RequestAttack(); }

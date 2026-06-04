@@ -2,20 +2,32 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
+using Pluminus.Sensors.Extended;
 
 namespace Soulsboss.Combat
 {
     public class BossController : MonoBehaviour
     {
-        public enum ControlMode { Auto, Manual }
+        public enum ControlMode
+        {
+            [Tooltip("Le boss utilise sa boucle interne (guard/attack aleatoire).")]
+            Auto,
+
+            [Tooltip("Le boss attend des inputs externes (Pluminus IA ou joueur humain).")]
+            ExternalInput
+        }
 
         public Health health;
         public BossShield shield;
         public Transform target;
         public string targetTag = "Player";
 
+        [Header("Pluminus (Optionnel)")]
+        [Tooltip("Glissez le PluminusArrayStateSensor ici pour exposer l'etat du boss a l'IA adverse.")]
+        public PluminusArrayStateSensor stateSensor;
+
         [Header("Control")]
-        [Tooltip("Auto = IA interne (boucle guard/attack). Manual = attente d'input externe.")]
+        [Tooltip("Auto = IA interne (boucle guard/attack). ExternalInput = attente d'input externe (Pluminus IA ou joueur).")]
         public ControlMode controlMode = ControlMode.Auto;
 
         [Tooltip("Attacks the boss may use. Drag BossAttack-derived components here.")]
@@ -37,6 +49,14 @@ namespace Soulsboss.Combat
         [Tooltip("Boss won't move if already within this range.")]
         public float stopDistance = 2f;
 
+        [Header("Dash")]
+        [Tooltip("Distance parcourue par le dash.")]
+        public float dashDistance = 4f;
+        [Tooltip("Duree du dash en secondes.")]
+        public float dashDuration = 0.25f;
+        [Tooltip("Cooldown entre deux dashs.")]
+        public float dashCooldown = 0.5f;
+
         [Header("Events")]
         public UnityEvent OnAttackBegan;
         public UnityEvent OnAttackEnded;
@@ -54,6 +74,9 @@ namespace Soulsboss.Combat
 
         Coroutine loop;
         CharacterController cc;
+        Vector3 aiMoveDirection;
+        bool isDashing;
+        float nextDashTime;
 
         void Start()
         {
@@ -72,8 +95,15 @@ namespace Soulsboss.Combat
 
         void Update()
         {
-            if (canRotate && Current != State.Attacking) FaceTarget();
-            if (Current == State.Guarding || Current == State.Idle) MoveTowardTarget();
+            if (canRotate) FaceTarget();
+
+            if (Current == State.Guarding || Current == State.Idle)
+            {
+                if (controlMode == ControlMode.Auto)
+                    MoveTowardTarget();
+                else
+                    ApplyAIMove();
+            }
 
             if (target != null)
             {
@@ -106,6 +136,19 @@ namespace Soulsboss.Combat
         public void DoAttack2() => TryAttack(2);
         public void DoAttack3() => TryAttack(3);
         public void DoAttack4() => TryAttack(4);
+
+        /// <summary>Action : Ne rien faire.</summary>
+        public void DoIdle() { }
+
+        /// <summary>Action : Dash droit vers la cible.</summary>
+        public void DoDash()
+        {
+            if (target == null) return;
+            if (Current == State.Attacking || Current == State.Dead) return;
+            if (isDashing) return;
+            if (Time.time < nextDashTime) return;
+            StartCoroutine(DashRoutine());
+        }
 
         // ──────────────────────────────────────
         //  API publique pour agent / joueur
@@ -212,6 +255,7 @@ namespace Soulsboss.Combat
 
             Current = State.Guarding;
             if (shield != null) shield.Raise();
+            if (stateSensor != null) stateSensor.ResetAll();
 
             if (controlMode == ControlMode.Auto)
                 loop = StartCoroutine(AutoLoop());
@@ -224,10 +268,26 @@ namespace Soulsboss.Combat
             Current = State.Attacking;
             CurrentAttack = attack;
             if (shield != null) shield.Lower();
+
+            // Pluminus : signale le type d'attaque (index+1) en phase Prep (1)
+            int attackType = attacks.IndexOf(attack) + 1;
+            if (stateSensor != null)
+            {
+                stateSensor.SetAxis(0, attackType);  // Axe 0 = Type Action
+                stateSensor.SetAxis(1, 1);            // Axe 1 = Phase Prep
+            }
+
             OnAttackBegan?.Invoke();
+
+            // Pluminus : phase Active (2) au moment de l'execution
+            if (stateSensor != null) stateSensor.SetAxis(1, 2);
+
             yield return attack.Execute(this);
             OnAttackEnded?.Invoke();
             CurrentAttack = null;
+
+            // Pluminus : retour au repos
+            if (stateSensor != null) stateSensor.ResetAll();
         }
 
         // ──────────────────────────────────────
@@ -265,6 +325,51 @@ namespace Soulsboss.Combat
         // ──────────────────────────────────────
         //  Utilitaires prives
         // ──────────────────────────────────────
+
+        IEnumerator DashRoutine()
+        {
+            isDashing = true;
+            nextDashTime = Time.time + dashCooldown;
+
+            Vector3 dir = (target.position - transform.position);
+            dir.y = 0f;
+            dir.Normalize();
+
+            float speed = dashDistance / dashDuration;
+            float t = 0f;
+
+            while (t < dashDuration)
+            {
+                Vector3 move = dir * speed * Time.deltaTime;
+                if (cc != null)
+                    cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
+                else
+                    transform.position += move;
+
+                t += Time.deltaTime;
+                yield return null;
+            }
+
+            isDashing = false;
+        }
+
+        void ApplyAIMove()
+        {
+            if (aiMoveDirection.sqrMagnitude < 0.001f) return;
+
+            Vector3 move = aiMoveDirection * moveSpeed * Time.deltaTime;
+
+            if (cc != null)
+                cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
+            else
+                transform.position += move;
+        }
+
+        void LateUpdate()
+        {
+            if (controlMode == ControlMode.ExternalInput)
+                aiMoveDirection = Vector3.zero;
+        }
 
         void MoveTowardTarget()
         {
