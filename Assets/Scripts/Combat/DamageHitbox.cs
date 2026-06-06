@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace Soulsboss.Combat
 {
@@ -12,6 +13,15 @@ namespace Soulsboss.Combat
         public float radius = 1f;
         public float length = 2f;
         public Vector3 offset = Vector3.zero;
+
+        [Header("Events")]
+        [Tooltip("Invoque quand le premier hit du swing connecte.")]
+        public UnityEvent OnHit;
+        [Tooltip("Invoque quand le swing se termine sans avoir touche personne.")]
+        public UnityEvent OnWhiff;
+
+        /// <summary>Nombre de cibles touchees pendant le swing actuel.</summary>
+        public int HitCount => hitThisSwing.Count;
 
         readonly HashSet<IDamageable> hitThisSwing = new HashSet<IDamageable>();
         bool active;
@@ -31,6 +41,8 @@ namespace Soulsboss.Combat
 
         public void End()
         {
+            if (active && hitThisSwing.Count == 0)
+                OnWhiff?.Invoke();
             active = false;
             hasPrev = false;
         }
@@ -78,8 +90,10 @@ namespace Soulsboss.Combat
                 if (!target.IsAlive) continue;
                 if (hitThisSwing.Contains(target)) continue;
 
+                bool wasEmpty = hitThisSwing.Count == 0;
                 hitThisSwing.Add(target);
                 target.TakeDamage(damage, transform.position);
+                if (wasEmpty) OnHit?.Invoke();
             }
         }
 

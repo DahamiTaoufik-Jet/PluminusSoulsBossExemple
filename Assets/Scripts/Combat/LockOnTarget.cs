@@ -1,18 +1,48 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Soulsboss.Combat
 {
+    /// <summary>
+    /// Force l'objet a toujours regarder la cible.
+    /// A placer sur le GameObject racine (ex: BossObject) pour que
+    /// toute la hierarchie enfant suive la rotation.
+    /// Respecte BossController.canRotate si present dans les enfants.
+    /// </summary>
     public class LockOnTarget : MonoBehaviour
     {
-        [Tooltip("Optional aim pivot (chest height). Defaults to this transform if null.")]
-        public Transform pivot;
+        [Tooltip("Glissez le GameObject du joueur ici.")]
+        public Transform target;
 
-        public Transform Pivot => pivot != null ? pivot : transform;
+        [Tooltip("Vitesse de rotation (degres/sec). 0 = snap instantane.")]
+        public float rotationSpeed = 720f;
 
-        public static readonly List<LockOnTarget> All = new List<LockOnTarget>();
+        [Tooltip("Offset Y pour aligner l'axe visuel du modele. -90 si le forward du modele est X+.")]
+        public float yAxisOffset = -90f;
 
-        void OnEnable() { if (!All.Contains(this)) All.Add(this); }
-        void OnDisable() { All.Remove(this); }
+        BossController bossController;
+
+        void Awake()
+        {
+            bossController = GetComponentInChildren<BossController>();
+        }
+
+        void LateUpdate()
+        {
+            if (bossController != null && !bossController.canRotate) return;
+            if (target == null) return;
+            if (!target.gameObject.activeInHierarchy) return;
+
+            Vector3 dir = target.position - transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.001f) return;
+
+            Quaternion want = Quaternion.LookRotation(dir) * Quaternion.Euler(0f, yAxisOffset, 0f);
+
+            if (rotationSpeed <= 0f)
+                transform.rotation = want;
+            else
+                transform.rotation = Quaternion.RotateTowards(
+                    transform.rotation, want, rotationSpeed * Time.deltaTime);
+        }
     }
 }

@@ -57,9 +57,15 @@ namespace Soulsboss.Combat
         [Tooltip("Cooldown entre deux dashs.")]
         public float dashCooldown = 0.5f;
 
+        [Header("Sword Reset")]
+        [Tooltip("Glissez le pivot de l'epee ici pour reset sa pose entre les episodes.")]
+        public Transform swordPivot;
+
         [Header("Events")]
         public UnityEvent OnAttackBegan;
         public UnityEvent OnAttackEnded;
+        [Tooltip("Invoque quand une attaque se termine sans toucher ni etre bloquee par la cible.")]
+        public UnityEvent OnAttackWhiffed;
 
         public enum State { Idle, Guarding, Attacking, Dead }
         public State Current { get; private set; } = State.Idle;
@@ -77,25 +83,63 @@ namespace Soulsboss.Combat
         Vector3 aiMoveDirection;
         bool isDashing;
         float nextDashTime;
+        bool attackLandedFlag;
+        Vector3 savedSwordLocalPos;
+        Quaternion savedSwordLocalRot;
+
+        /// <summary>Transform racine deplace par le mouvement (parent pour eviter le desync de rotation).</summary>
+        public Transform MoveTransform { get; private set; }
 
         void Start()
         {
             if (health == null) health = GetComponent<Health>();
             if (shield == null) shield = GetComponentInChildren<BossShield>();
             cc = GetComponent<CharacterController>();
-            ResolveTarget();
+            MoveTransform = transform.parent != null ? transform.parent : transform;
+            if (swordPivot != null)
+            {
+                savedSwordLocalPos = swordPivot.localPosition;
+                savedSwordLocalRot = swordPivot.localRotation;
+            }
+            SyncTargetFromLockOn();
+            StartLoop();
+        }
 
+        public bool canRotate = true;
+
+        /// <summary>
+        /// Reinitialise l'etat interne du boss apres un reset d'episode.
+        /// A wirer dans PluminusTrainingManager.OnReset ou Health.ResetHealth.
+        /// </summary>
+        public void ResetState()
+        {
+            StopAllCoroutines();
+            Current = State.Idle;
+            CurrentAttack = null;
+            canRotate = true;
+            isDashing = false;
+            nextDashTime = 0f;
+            attackLandedFlag = false;
+            aiMoveDirection = Vector3.zero;
+            if (swordPivot != null)
+            {
+                swordPivot.localPosition = savedSwordLocalPos;
+                swordPivot.localRotation = savedSwordLocalRot;
+            }
+            SyncTargetFromLockOn();
+            StartLoop();
+        }
+
+        void StartLoop()
+        {
             if (controlMode == ControlMode.Auto)
                 loop = StartCoroutine(AutoLoop());
             else
                 loop = StartCoroutine(ManualLoop());
         }
 
-        public bool canRotate = true;
-
         void Update()
         {
-            if (canRotate) FaceTarget();
 
             if (Current == State.Guarding || Current == State.Idle)
             {
@@ -210,6 +254,7 @@ namespace Soulsboss.Combat
             {
                 Current = State.Guarding;
                 if (shield != null) shield.Raise();
+                if (stateSensor != null) { stateSensor.SetAxis(0, 0); stateSensor.SetAxis(1, 1); }
                 float wait = guardDuration + Random.Range(-guardJitter, guardJitter);
                 yield return new WaitForSeconds(Mathf.Max(0.1f, wait));
 
@@ -232,6 +277,7 @@ namespace Soulsboss.Combat
                 {
                     Current = State.Guarding;
                     if (shield != null) shield.Raise();
+                    if (stateSensor != null) { stateSensor.SetAxis(0, 0); stateSensor.SetAxis(1, 1); }
                 }
                 yield return null;
             }
@@ -253,9 +299,10 @@ namespace Soulsboss.Combat
         {
             yield return ExecuteAttackRoutine(attack);
 
+            canRotate = true; // Securite : si l'attaque (ex: Leap) a ete interrompue
             Current = State.Guarding;
             if (shield != null) shield.Raise();
-            if (stateSensor != null) stateSensor.ResetAll();
+            if (stateSensor != null) { stateSensor.SetAxis(0, 0); stateSensor.SetAxis(1, 1); }
 
             if (controlMode == ControlMode.Auto)
                 loop = StartCoroutine(AutoLoop());
@@ -267,28 +314,48 @@ namespace Soulsboss.Combat
         {
             Current = State.Attacking;
             CurrentAttack = attack;
+            canRotate = false;
             if (shield != null) shield.Lower();
 
-            // Pluminus : signale le type d'attaque (index+1) en phase Prep (1)
+            // Whiff detection : ecoute temporaire des events de la cible
+            attackLandedFlag = false;
+            Health targetHealth = (target != null) ? target.GetComponent<Health>() : null;
+            if (targetHealth != null)
+            {
+                targetHealth.OnDamaged.AddListener(MarkAttackLanded);
+                targetHealth.OnBlocked.AddListener(MarkAttackLanded);
+            }
+
+            // Pluminus : signale le type d'attaque (index+1) en phase Prep (2)
             int attackType = attacks.IndexOf(attack) + 1;
             if (stateSensor != null)
             {
                 stateSensor.SetAxis(0, attackType);  // Axe 0 = Type Action
-                stateSensor.SetAxis(1, 1);            // Axe 1 = Phase Prep
+                stateSensor.SetAxis(1, 2);            // Axe 1 = Phase Prep
             }
 
             OnAttackBegan?.Invoke();
 
-            // Pluminus : phase Active (2) au moment de l'execution
-            if (stateSensor != null) stateSensor.SetAxis(1, 2);
+            // Pluminus : phase Active (3) au moment de l'execution
+            if (stateSensor != null) stateSensor.SetAxis(1, 3);
 
             yield return attack.Execute(this);
             OnAttackEnded?.Invoke();
             CurrentAttack = null;
 
+            // Nettoyage des listeners + detection whiff
+            if (targetHealth != null)
+            {
+                targetHealth.OnDamaged.RemoveListener(MarkAttackLanded);
+                targetHealth.OnBlocked.RemoveListener(MarkAttackLanded);
+            }
+            if (!attackLandedFlag) OnAttackWhiffed?.Invoke();
+
             // Pluminus : retour au repos
             if (stateSensor != null) stateSensor.ResetAll();
         }
+
+        void MarkAttackLanded() { attackLandedFlag = true; }
 
         // ──────────────────────────────────────
         //  Legacy / debug
@@ -344,7 +411,7 @@ namespace Soulsboss.Combat
                 if (cc != null)
                     cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
                 else
-                    transform.position += move;
+                    MoveTransform.position += move;
 
                 t += Time.deltaTime;
                 yield return null;
@@ -362,11 +429,13 @@ namespace Soulsboss.Combat
             if (cc != null)
                 cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
             else
-                transform.position += move;
+                MoveTransform.position += move;
         }
 
         void LateUpdate()
         {
+            // Rotation geree par LockOnTarget sur le parent (BossObject)
+
             if (controlMode == ControlMode.ExternalInput)
                 aiMoveDirection = Vector3.zero;
         }
@@ -385,23 +454,36 @@ namespace Soulsboss.Combat
             if (cc != null)
                 cc.Move(move + Vector3.down * 9.81f * Time.deltaTime);
             else
-                transform.position += move;
+                MoveTransform.position += move;
+        }
+
+        /// <summary>Synchronise target avec LockOnTarget du parent (source unique de verite).</summary>
+        void SyncTargetFromLockOn()
+        {
+            LockOnTarget lockOn = GetComponentInParent<LockOnTarget>();
+            if (lockOn != null && lockOn.target != null)
+                target = lockOn.target;
+            else
+                ResolveTarget();
         }
 
         void ResolveTarget()
         {
             if (target != null) return;
+            // Recherche par tag
             var go = GameObject.FindGameObjectWithTag(targetTag);
-            if (go != null) target = go.transform;
-        }
-
-        void FaceTarget()
-        {
-            if (target == null) { ResolveTarget(); if (target == null) return; }
-            Vector3 d = target.position - transform.position; d.y = 0f;
-            if (d.sqrMagnitude < 0.01f) return;
-            Quaternion want = Quaternion.LookRotation(d) * Quaternion.Euler(0f, -90f, 0f);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, want, turnSpeed * Time.deltaTime);
+            if (go != null) { target = go.transform; return; }
+            // Fallback : cherche un Health d'equipe opposee
+            var healths = FindObjectsByType<Health>(FindObjectsSortMode.None);
+            for (int i = 0; i < healths.Length; i++)
+            {
+                if (healths[i] == health) continue;
+                if (healths[i].team == Team.Boss) continue;
+                target = healths[i].transform;
+                Debug.LogWarning($"[BossController] Cible trouvee par fallback Health: {target.name}. Pensez a assigner le tag '{targetTag}'.");
+                return;
+            }
+            Debug.LogError($"[BossController] Aucune cible trouvee ! Verifiez le tag '{targetTag}' ou assignez 'target' dans l'Inspector.");
         }
 
         BossAttack PickAttack(float distance)

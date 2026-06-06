@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 
 namespace Soulsboss.Combat
@@ -29,6 +30,14 @@ namespace Soulsboss.Combat
         [Tooltip("Cooldown entre deux dashs.")]
         public float dashCooldown = 0.5f;
 
+        [Header("Engagement Distance")]
+        [Tooltip("Distance max avant de recevoir une penalite de fuite.")]
+        public float maxEngagementDistance = 8f;
+        [Tooltip("Intervalle entre chaque penalite (secondes).")]
+        public float penaltyInterval = 0.5f;
+        [Tooltip("Invoque periodiquement quand le joueur est trop loin du boss.")]
+        public UnityEvent OnTooFar;
+
         [Header("Ground check")]
         public float groundCheckRadius = 0.3f;
         public float groundCheckOffset = 0.1f;
@@ -42,6 +51,7 @@ namespace Soulsboss.Combat
         bool grounded;
         bool isDashing;
         float nextDashTime;
+        float penaltyTimer;
 
         // Directions calculees chaque frame (joueur -> boss)
         Vector3 toBossDir;
@@ -56,6 +66,22 @@ namespace Soulsboss.Combat
         void Awake()
         {
             cc = GetComponent<CharacterController>();
+        }
+
+        /// <summary>
+        /// Reinitialise l'etat interne du joueur apres un reset d'episode.
+        /// A wirer dans PluminusTrainingManager.OnReset.
+        /// </summary>
+        public void ResetState()
+        {
+            StopAllCoroutines();
+            inputLocked = false;
+            isDashing = false;
+            nextDashTime = 0f;
+            fallSpeed = 0f;
+            moveInput = Vector2.zero;
+            aiMoveInput = Vector2.zero;
+            penaltyTimer = 0f;
         }
 
         void Start()
@@ -73,6 +99,7 @@ namespace Soulsboss.Combat
             GroundCheck();
             ApplyMovement();
             ApplyRotation();
+            CheckEngagementDistance();
         }
 
         void ComputeDirections()
@@ -92,6 +119,23 @@ namespace Soulsboss.Combat
             // Fallback : X+ = forward du modele
             toBossDir = transform.right;
             strafeDir = -transform.forward;
+        }
+
+        void CheckEngagementDistance()
+        {
+            if (boss == null || !boss.gameObject.activeInHierarchy) return;
+            if (controlMode != ControlMode.AI) return;
+
+            Vector3 diff = boss.position - transform.position;
+            diff.y = 0f;
+            if (diff.magnitude <= maxEngagementDistance) return;
+
+            penaltyTimer += Time.deltaTime;
+            if (penaltyTimer >= penaltyInterval)
+            {
+                penaltyTimer = 0f;
+                OnTooFar?.Invoke();
+            }
         }
 
         void GroundCheck()

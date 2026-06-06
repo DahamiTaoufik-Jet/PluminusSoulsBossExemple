@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Soulsboss.Combat
@@ -48,6 +49,7 @@ namespace Soulsboss.Combat
         public override IEnumerator Execute(BossController boss)
         {
             Transform bossTransform = boss.transform;
+            Transform moveRoot = boss.MoveTransform;
             Transform target = boss.Target;
             if (target == null) yield break;
 
@@ -88,7 +90,7 @@ namespace Soulsboss.Combat
                 float height = Mathf.Sin(smooth * Mathf.PI * 0.5f) * leapHeight;
                 Vector3 pos = new Vector3(horizontal.x, startPos.y + height, horizontal.z);
 
-                MoveToPosition(bossTransform, cc, pos);
+                MoveToPosition(moveRoot, cc, bossTransform, pos);
                 yield return null;
             }
 
@@ -119,12 +121,12 @@ namespace Soulsboss.Combat
                 float height = Mathf.Lerp(peakHeight, 0f, smooth);
                 Vector3 pos = new Vector3(horizontal.x, startPos.y + height, horizontal.z);
 
-                MoveToPosition(bossTransform, cc, pos);
+                MoveToPosition(moveRoot, cc, bossTransform, pos);
                 yield return null;
             }
 
             // Snap to ground
-            MoveToPosition(bossTransform, cc, landPos);
+            MoveToPosition(moveRoot, cc, bossTransform, landPos);
 
             // Impact — AOE damage
             if (hitbox != null) hitbox.Begin();
@@ -144,8 +146,11 @@ namespace Soulsboss.Combat
                 yield return MoveSword(originalPos, originalRot, 0.3f);
         }
 
+        readonly HashSet<IDamageable> slamHitTargets = new HashSet<IDamageable>();
+
         void SlamAOE(Transform center)
         {
+            slamHitTargets.Clear();
             Collider[] hits = Physics.OverlapSphere(center.position, slamRadius);
             for (int i = 0; i < hits.Length; i++)
             {
@@ -153,12 +158,14 @@ namespace Soulsboss.Combat
                 if (target == null) continue;
                 if (target.Team == Team.Boss) continue;
                 if (!target.IsAlive) continue;
+                if (slamHitTargets.Contains(target)) continue;
 
+                slamHitTargets.Add(target);
                 target.TakeDamage(slamDamage, center.position);
             }
         }
 
-        void MoveToPosition(Transform bossTransform, CharacterController cc, Vector3 targetPos)
+        void MoveToPosition(Transform moveRoot, CharacterController cc, Transform bossTransform, Vector3 targetPos)
         {
             if (cc != null)
             {
@@ -167,7 +174,8 @@ namespace Soulsboss.Combat
             }
             else
             {
-                bossTransform.position = targetPos;
+                Vector3 delta = targetPos - bossTransform.position;
+                moveRoot.position += delta;
             }
         }
 

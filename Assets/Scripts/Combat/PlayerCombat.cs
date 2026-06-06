@@ -31,7 +31,11 @@ namespace Soulsboss.Combat
         public float dodgeCooldown = 1f;
 
         public UnityEvent OnAttackStarted;
+        [Tooltip("Invoque quand l'attaque du joueur se termine sans toucher personne.")]
+        public UnityEvent OnAttackWhiffed;
         public UnityEvent OnDodged;
+        [Tooltip("Invoque quand le joueur esquive alors que le boss n'etait pas en train d'attaquer.")]
+        public UnityEvent OnDodgeEmpty;
 
         CharacterController cc;
         float nextAttackTime;
@@ -40,6 +44,8 @@ namespace Soulsboss.Combat
         bool attacking;
         Vector3 originalSwordRotation;
         ParticleSystem dodgeParticles;
+        Vector3 savedSwordLocalPos;
+        Quaternion savedSwordLocalRot;
 
         public bool CanAttack => Time.time >= nextAttackTime && !dodging && !attacking;
         public bool IsDodging => dodging;
@@ -50,7 +56,32 @@ namespace Soulsboss.Combat
             cc = GetComponent<CharacterController>();
             if (controller == null) controller = GetComponent<PlayerController>();
             if (health == null) health = GetComponent<Health>();
+            if (swordPivot != null)
+            {
+                savedSwordLocalPos = swordPivot.localPosition;
+                savedSwordLocalRot = swordPivot.localRotation;
+            }
             BuildDodgeParticles();
+        }
+
+        /// <summary>
+        /// Reinitialise l'etat de combat apres un reset d'episode.
+        /// A wirer dans PluminusTrainingManager.OnReset.
+        /// </summary>
+        public void ResetState()
+        {
+            StopAllCoroutines();
+            attacking = false;
+            dodging = false;
+            nextAttackTime = 0f;
+            nextDodgeTime = 0f;
+            if (health != null) health.invincible = false;
+            if (controller != null) controller.SetInputLocked(false);
+            if (swordPivot != null)
+            {
+                swordPivot.localPosition = savedSwordLocalPos;
+                swordPivot.localRotation = savedSwordLocalRot;
+            }
         }
 
         public void RequestAttack()
@@ -88,7 +119,11 @@ namespace Soulsboss.Combat
                 yield return RotateSword(strikeRotation, attackActiveWindow);
             else
                 yield return new WaitForSeconds(attackActiveWindow);
-            if (swordHitbox != null) swordHitbox.End();
+            if (swordHitbox != null)
+            {
+                swordHitbox.End();
+                if (swordHitbox.HitCount == 0) OnAttackWhiffed?.Invoke();
+            }
 
             // Recovery: return to rest
             if (swordPivot != null)
@@ -126,6 +161,10 @@ namespace Soulsboss.Combat
             float iframeEnd = Time.time + iframeDuration;
             float t = 0f;
 
+            // Whiff dodge : on traque si le boss attaquait pendant le dodge
+            bool bossWasAttacking = false;
+            BossController bossCtrl = (boss != null) ? boss.GetComponent<BossController>() : null;
+
             if (boss != null && boss.gameObject.activeInHierarchy)
             {
                 // Arc de cercle autour du boss
@@ -143,6 +182,9 @@ namespace Soulsboss.Combat
 
                 while (t < dodgeDuration)
                 {
+                    if (bossCtrl != null && bossCtrl.Current == BossController.State.Attacking)
+                        bossWasAttacking = true;
+
                     currentAngle += angularSpeed * Time.deltaTime;
                     Vector3 desired = boss.position + new Vector3(
                         Mathf.Sin(currentAngle) * radius,
@@ -174,6 +216,9 @@ namespace Soulsboss.Combat
             if (health != null) health.invincible = false;
             controller.SetInputLocked(false);
             dodging = false;
+
+            // Dodge dans le vide : le boss n'attaquait pas du tout
+            if (!bossWasAttacking) OnDodgeEmpty?.Invoke();
         }
 
         void BuildDodgeParticles()
