@@ -57,6 +57,10 @@ namespace Soulsboss.Combat
         [Tooltip("Cooldown entre deux dashs.")]
         public float dashCooldown = 0.5f;
 
+        [Header("Force Attack (Anti-Idle)")]
+        [Tooltip("Si > 0 et en mode ExternalInput, force une attaque aleatoire si le boss n'attaque pas pendant N secondes.")]
+        public float forceAttackAfterIdle = 3f;
+
         [Header("Sword Reset")]
         [Tooltip("Glissez le pivot de l'epee ici pour reset sa pose entre les episodes.")]
         public Transform swordPivot;
@@ -84,6 +88,7 @@ namespace Soulsboss.Combat
         bool isDashing;
         float nextDashTime;
         bool attackLandedFlag;
+        float idleTimer;
         Vector3 savedSwordLocalPos;
         Quaternion savedSwordLocalRot;
 
@@ -121,6 +126,7 @@ namespace Soulsboss.Combat
             nextDashTime = 0f;
             attackLandedFlag = false;
             aiMoveDirection = Vector3.zero;
+            idleTimer = 0f;
             if (swordPivot != null)
             {
                 swordPivot.localPosition = savedSwordLocalPos;
@@ -163,6 +169,24 @@ namespace Soulsboss.Combat
                 if (loop != null) StopCoroutine(loop);
                 StopAllCoroutines();
             }
+
+            // Force une attaque aleatoire si idle trop longtemps
+            if (controlMode == ControlMode.ExternalInput && forceAttackAfterIdle > 0f && Current != State.Dead)
+            {
+                if (Current == State.Attacking)
+                {
+                    idleTimer = 0f;
+                }
+                else
+                {
+                    idleTimer += Time.deltaTime;
+                    if (idleTimer >= forceAttackAfterIdle)
+                    {
+                        idleTimer = 0f;
+                        ForceRandomAttack();
+                    }
+                }
+            }
         }
 
         // ──────────────────────────────────────
@@ -183,6 +207,33 @@ namespace Soulsboss.Combat
 
         /// <summary>Action : Ne rien faire.</summary>
         public void DoIdle() { }
+
+        /// <summary>
+        /// Force une attaque au hasard parmi celles a portee. Ignore l'etat actuel (sauf Dead).
+        /// </summary>
+        public void ForceRandomAttack()
+        {
+            if (Current == State.Dead) return;
+            if (attacks.Count == 0) return;
+
+            // Cherche les attaques a portee
+            List<int> available = new List<int>();
+            for (int i = 0; i < attacks.Count; i++)
+            {
+                if (attacks[i] != null && attacks[i].IsInRange(DistanceToTarget))
+                    available.Add(i);
+            }
+
+            if (available.Count == 0)
+            {
+                // Rien a portee -> dash vers la cible
+                DoDash();
+                return;
+            }
+
+            int pick = available[Random.Range(0, available.Count)];
+            ExecuteAttack(attacks[pick]);
+        }
 
         /// <summary>Action : Dash droit vers la cible.</summary>
         public void DoDash()
