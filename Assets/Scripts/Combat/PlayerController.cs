@@ -186,21 +186,24 @@ namespace Soulsboss.Combat
         /// <summary>Action 1 : Dash vers le boss.</summary>
         public void DoDashForward() { TryDash(toBossDir); }
 
-        /// <summary>Action 2 : Attaquer. Delegue a PlayerCombat.</summary>
+        /// <summary>Action 2 : Dash en arriere du boss.</summary>
+        public void DoDashBackward() { TryDash(-toBossDir); }
+
+        /// <summary>Action 3 : Attaquer. Delegue a PlayerCombat.</summary>
         public void DoAttack()
         {
             PlayerCombat combat = GetComponent<PlayerCombat>();
             if (combat != null) combat.RequestAttack();
         }
 
-        /// <summary>Action 3 : Esquiver a gauche.</summary>
+        /// <summary>Action 4 : Esquiver a gauche.</summary>
         public void DoDodgeLeft()
         {
             PlayerCombat combat = GetComponent<PlayerCombat>();
             if (combat != null) combat.RequestDodge(1);
         }
 
-        /// <summary>Action 4 : Esquiver a droite.</summary>
+        /// <summary>Action 5 : Esquiver a droite.</summary>
         public void DoDodgeRight()
         {
             PlayerCombat combat = GetComponent<PlayerCombat>();
