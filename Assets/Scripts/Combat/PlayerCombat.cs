@@ -243,11 +243,14 @@ namespace Soulsboss.Combat
             if (!bossWasAttacking)
             {
                 OnDodgeEmpty?.Invoke();
+                // Cooldown normal : tu as esquive dans le vide, assume le cooldown
             }
             else
             {
-                // Esquive reussie : ouvre la fenetre de contre
+                // Esquive parfaite : ouvre la fenetre de contre + reset cooldown
                 counterWindowEnd = Time.time + counterWindowDuration;
+                nextDodgeTime = 0f;
+                nextAttackTime = 0f;
             }
         }
 
