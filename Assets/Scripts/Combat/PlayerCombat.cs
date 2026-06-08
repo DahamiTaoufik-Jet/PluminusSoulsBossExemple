@@ -30,18 +30,28 @@ namespace Soulsboss.Combat
         public float iframeDuration = 0.25f;
         public float dodgeCooldown = 1f;
 
+        [Header("Counter Window")]
+        [Tooltip("Duree en secondes apres une esquive reussie pendant laquelle une attaque compte comme un counter-hit.")]
+        public float counterWindowDuration = 1.5f;
+
+        [Header("Events")]
         public UnityEvent OnAttackStarted;
         [Tooltip("Invoque quand l'attaque du joueur se termine sans toucher personne.")]
         public UnityEvent OnAttackWhiffed;
         public UnityEvent OnDodged;
         [Tooltip("Invoque quand le joueur esquive alors que le boss n'etait pas en train d'attaquer.")]
         public UnityEvent OnDodgeEmpty;
+        [Tooltip("Invoque quand le joueur touche le boss dans la fenetre de contre (apres une esquive reussie).")]
+        public UnityEvent OnCounterHit;
+        [Tooltip("Invoque quand le joueur touche le boss SANS avoir esquive avant (attaque brute).")]
+        public UnityEvent OnRawHit;
 
         CharacterController cc;
         float nextAttackTime;
         float nextDodgeTime;
         bool dodging;
         bool attacking;
+        float counterWindowEnd;
         Vector3 originalSwordRotation;
         ParticleSystem dodgeParticles;
         Vector3 savedSwordLocalPos;
@@ -75,6 +85,7 @@ namespace Soulsboss.Combat
             dodging = false;
             nextAttackTime = 0f;
             nextDodgeTime = 0f;
+            counterWindowEnd = 0f;
             if (health != null) health.invincible = false;
             if (controller != null) controller.SetInputLocked(false);
             if (swordPivot != null)
@@ -122,7 +133,18 @@ namespace Soulsboss.Combat
             if (swordHitbox != null)
             {
                 swordHitbox.End();
-                if (swordHitbox.HitCount == 0) OnAttackWhiffed?.Invoke();
+                if (swordHitbox.HitCount == 0)
+                {
+                    OnAttackWhiffed?.Invoke();
+                }
+                else
+                {
+                    // L'attaque a touche : counter-hit ou attaque brute ?
+                    if (Time.time <= counterWindowEnd)
+                        OnCounterHit?.Invoke();
+                    else
+                        OnRawHit?.Invoke();
+                }
             }
 
             // Recovery: return to rest
@@ -218,7 +240,15 @@ namespace Soulsboss.Combat
             dodging = false;
 
             // Dodge dans le vide : le boss n'attaquait pas du tout
-            if (!bossWasAttacking) OnDodgeEmpty?.Invoke();
+            if (!bossWasAttacking)
+            {
+                OnDodgeEmpty?.Invoke();
+            }
+            else
+            {
+                // Esquive reussie : ouvre la fenetre de contre
+                counterWindowEnd = Time.time + counterWindowDuration;
+            }
         }
 
         void BuildDodgeParticles()
