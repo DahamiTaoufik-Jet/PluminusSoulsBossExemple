@@ -77,6 +77,7 @@ namespace Soulsboss.Combat
         public void ResetHealth()
         {
             StopAllCoroutines();
+            gameObject.SetActive(true);
             current = maxHp;
             invincible = false;
             guarding = false;

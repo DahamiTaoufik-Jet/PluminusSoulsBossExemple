@@ -58,8 +58,10 @@ namespace Soulsboss.Combat
         public float dashCooldown = 0.5f;
 
         [Header("Force Attack (Anti-Idle)")]
-        [Tooltip("Si > 0 et en mode ExternalInput, force une attaque aleatoire si le boss n'attaque pas pendant N secondes.")]
-        public float forceAttackAfterIdle = 3f;
+        [Tooltip("Delai minimum avant de forcer une attaque aleatoire (en secondes).")]
+        public float forceAttackMinDelay = 1f;
+        [Tooltip("Delai maximum avant de forcer une attaque aleatoire (en secondes).")]
+        public float forceAttackMaxDelay = 4f;
 
         [Header("Sword Reset")]
         [Tooltip("Glissez le pivot de l'epee ici pour reset sa pose entre les episodes.")]
@@ -79,6 +81,9 @@ namespace Soulsboss.Combat
         /// <summary>Distance actuelle vers la cible. Mise a jour chaque frame.</summary>
         public float DistanceToTarget { get; private set; }
 
+        /// <summary>True uniquement pendant la fenetre active du hitbox (entre Begin et End). Utilise par le joueur pour valider une esquive.</summary>
+        public bool IsInActiveStrike { get; set; }
+
         /// <summary>Nombre d'attaques dans la liste.</summary>
         public int AttackCount => attacks.Count;
 
@@ -89,6 +94,7 @@ namespace Soulsboss.Combat
         float nextDashTime;
         bool attackLandedFlag;
         float idleTimer;
+        float nextForceAttackDelay;
         Vector3 savedSwordLocalPos;
         Quaternion savedSwordLocalRot;
 
@@ -106,6 +112,7 @@ namespace Soulsboss.Combat
                 savedSwordLocalPos = swordPivot.localPosition;
                 savedSwordLocalRot = swordPivot.localRotation;
             }
+            nextForceAttackDelay = Random.Range(forceAttackMinDelay, forceAttackMaxDelay);
             SyncTargetFromLockOn();
             StartLoop();
         }
@@ -121,10 +128,12 @@ namespace Soulsboss.Combat
             StopAllCoroutines();
             Current = State.Idle;
             CurrentAttack = null;
+            IsInActiveStrike = false;
             canRotate = true;
             isDashing = false;
             nextDashTime = 0f;
             attackLandedFlag = false;
+            nextForceAttackDelay = Random.Range(forceAttackMinDelay, forceAttackMaxDelay);
             aiMoveDirection = Vector3.zero;
             idleTimer = 0f;
             if (swordPivot != null)
@@ -170,8 +179,8 @@ namespace Soulsboss.Combat
                 StopAllCoroutines();
             }
 
-            // Force une attaque aleatoire si idle trop longtemps
-            if (controlMode == ControlMode.ExternalInput && forceAttackAfterIdle > 0f && Current != State.Dead)
+            // Force une attaque aleatoire a des intervalles hasardeux
+            if (controlMode == ControlMode.ExternalInput && forceAttackMaxDelay > 0f && Current != State.Dead)
             {
                 if (Current == State.Attacking)
                 {
@@ -180,9 +189,10 @@ namespace Soulsboss.Combat
                 else
                 {
                     idleTimer += Time.deltaTime;
-                    if (idleTimer >= forceAttackAfterIdle)
+                    if (idleTimer >= nextForceAttackDelay)
                     {
                         idleTimer = 0f;
+                        nextForceAttackDelay = Random.Range(forceAttackMinDelay, forceAttackMaxDelay);
                         ForceRandomAttack();
                     }
                 }
@@ -386,6 +396,7 @@ namespace Soulsboss.Combat
             }
 
             OnAttackBegan?.Invoke();
+            yield return null;
 
             // Pluminus : phase Active (3) au moment de l'execution
             if (stateSensor != null) stateSensor.SetAxis(1, 3);

@@ -129,9 +129,11 @@ namespace Soulsboss.Combat
             MoveToPosition(moveRoot, cc, bossTransform, landPos);
 
             // Impact — AOE damage
+            boss.IsInActiveStrike = true;
             if (hitbox != null) hitbox.Begin();
             SlamAOE(bossTransform);
             if (hitbox != null) hitbox.End();
+            boss.IsInActiveStrike = false;
 
             if (impactParticles != null) impactParticles.Play();
 

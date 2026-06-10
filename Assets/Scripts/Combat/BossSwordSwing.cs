@@ -39,12 +39,14 @@ namespace Soulsboss.Combat
                 yield return new WaitForSeconds(telegraph);
 
             // Active window: swing down
+            boss.IsInActiveStrike = true;
             if (hitbox != null) hitbox.Begin();
             if (swordPivot != null)
                 yield return MoveTo(strikePosition, strikeRotation, swingDuration);
             else
                 yield return new WaitForSeconds(swingDuration);
             if (hitbox != null) hitbox.End();
+            boss.IsInActiveStrike = false;
 
             // Ending lag
             yield return new WaitForSeconds(endingLag);

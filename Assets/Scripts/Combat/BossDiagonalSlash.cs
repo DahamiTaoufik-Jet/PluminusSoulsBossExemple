@@ -28,12 +28,14 @@ namespace Soulsboss.Combat
             else
                 yield return new WaitForSeconds(telegraph);
 
+            boss.IsInActiveStrike = true;
             if (hitbox != null) hitbox.Begin();
             if (swordPivot != null)
                 yield return RotateTo(endRotation, slashDuration);
             else
                 yield return new WaitForSeconds(slashDuration);
             if (hitbox != null) hitbox.End();
+            boss.IsInActiveStrike = false;
 
             yield return new WaitForSeconds(endingLag);
 
