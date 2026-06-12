@@ -12,6 +12,12 @@ Il s'agit d'un jeu de combat 3D de type Souls-like où un joueur affronte un bos
 **Objectif principal (IA) :** 
 L'objectif final de ce projet est de servir de base pour intégrer **Pluminus**, un plugin d'apprentissage par renforcement (Q-learning). Le but est de créer un environnement d'entraînement où deux IA s'affrontent (un joueur artificiel contre le boss) afin que le boss apprenne de lui-même à se battre de manière optimale.
 
+
+
+https://github.com/user-attachments/assets/d9734afc-8d11-4af5-a733-458d597c64fd
+
+
+
 ## Pour commencer
 
 ### Prérequis
