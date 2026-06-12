@@ -9,12 +9,14 @@ Il s'agit d'un jeu de combat 3D de type Souls-like où un joueur affronte un bos
 - **Le Joueur** : Dispose d'attaques verticales et d'une esquive circulaire dotée de frames d'invulnérabilité (i-frames).
 - **Le Boss** : Possède une panoplie d'attaques variées (frappes au corps-à-corps, estoc, attaque sautée de zone) et un bouclier capable de punir le joueur par une contre-attaque inesquivable s'il frappe au mauvais moment.
 
-**Objectif principal (IA) :** 
+**Objectif principal:** 
 L'objectif final de ce projet est de servir de base pour intégrer **Pluminus**, un plugin d'apprentissage par renforcement (Q-learning). Le but est de créer un environnement d'entraînement où deux IA s'affrontent (un joueur artificiel contre le boss) afin que le boss apprenne de lui-même à se battre de manière optimale.
 
+La vidéo ci-dessous présente une session d'entraînement de l'agent Joueur en temps réel. L'algorithme de Q-learning ajuster le comportement de l'IA au fil des épisodes en fonction des récompenses et pénalités (réussite d'esquive, dégâts subis, etc.)
 
 
-https://github.com/user-attachments/assets/d9734afc-8d11-4af5-a733-458d597c64fd
+
+https://github.com/user-attachments/assets/39c088d1-29ca-4394-a817-5d57c791730b
 
 
 
